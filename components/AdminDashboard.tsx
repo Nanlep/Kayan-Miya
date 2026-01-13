@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Product } from '../types';
 import { MOCK_ANALYTICS } from '../constants';
 import { geminiService } from '../services/geminiService';
@@ -24,7 +24,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Taxonomy specific feedback
+  const [taxonomyFeedback, setTaxonomyFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear feedback after 3 seconds
+  useEffect(() => {
+    if (taxonomyFeedback) {
+      const timer = setTimeout(() => setTaxonomyFeedback(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [taxonomyFeedback]);
 
   const filteredAdminProducts = useMemo(() => {
     return products.filter(p => 
@@ -73,20 +84,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
 
   const handleAddCategory = () => {
     const trimmed = newCategoryName.trim();
-    if (trimmed && !categories.includes(trimmed)) {
-      setCategories(prev => [...prev, trimmed]);
-      setNewCategoryName('');
+    if (!trimmed) {
+      setTaxonomyFeedback({ type: 'error', message: 'Category name cannot be empty.' });
+      return;
     }
+
+    // Check for duplicates (case-insensitive)
+    const exists = categories.some(c => c.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      setTaxonomyFeedback({ type: 'error', message: `"${trimmed}" already exists in the market taxonomy.` });
+      return;
+    }
+
+    setCategories(prev => [...prev, trimmed]);
+    setNewCategoryName('');
+    setTaxonomyFeedback({ type: 'success', message: `"${trimmed}" added successfully.` });
+    
+    // Auto-select this category for the next product addition to improve flow
+    setNewProduct(prev => ({ ...prev, category: trimmed }));
   };
 
   const deleteCategory = (catToDelete: string) => {
     const count = products.filter(p => p.category === catToDelete).length;
     if (count > 0) {
-      alert(`Cannot delete category "${catToDelete}". It is currently assigned to ${count} products. Reassign them first.`);
+      setTaxonomyFeedback({ type: 'error', message: `Blocked: ${count} items currently use "${catToDelete}".` });
       return;
     }
-    if (confirm(`Are you sure you want to remove the "${catToDelete}" category?`)) {
+    
+    if (confirm(`Remove "${catToDelete}" from taxonomy? This action cannot be undone.`)) {
       setCategories(prev => prev.filter(cat => cat !== catToDelete));
+      setTaxonomyFeedback({ type: 'success', message: `"${catToDelete}" has been removed.` });
+      
+      // If the current newProduct selection was this category, reset it
+      if (newProduct.category === catToDelete) {
+        setNewProduct(prev => ({ ...prev, category: categories.find(c => c !== catToDelete) || 'Uncategorized' }));
+      }
     }
   };
 
@@ -400,8 +432,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
 
       {activeTab === 'taxonomy' && (
         <div className="space-y-8 max-w-4xl">
-          <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-             <div className="flex items-center gap-4 mb-8">
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
+             {/* Feedback Toast */}
+             {taxonomyFeedback && (
+               <div className={`absolute top-0 left-0 w-full p-4 text-center text-xs font-black uppercase tracking-widest animate-in slide-in-from-top duration-300 ${
+                 taxonomyFeedback.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+               }`}>
+                 {taxonomyFeedback.message}
+               </div>
+             )}
+
+             <div className="flex items-center gap-4 mb-8 mt-6">
               <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-100">
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -409,22 +450,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
               </div>
               <div>
                 <h3 className="text-xl font-black text-slate-900">Taxonomy Manager</h3>
-                <p className="text-xs text-slate-500">Add or remove product categories to restructure your market sections.</p>
+                <p className="text-xs text-slate-500">Refine the market taxonomy to help customers find produce faster.</p>
               </div>
             </div>
 
             <div className="flex gap-4 mb-10">
-              <input 
-                type="text" 
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                placeholder="Enter new category name..."
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium"
-              />
+              <div className="flex-1 relative">
+                <input 
+                  type="text" 
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                  placeholder="Enter unique category name..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                />
+                {newCategoryName && (
+                  <button 
+                    onClick={() => setNewCategoryName('')}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <button 
                 onClick={handleAddCategory}
-                className="bg-indigo-600 text-white px-8 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg"
+                className="bg-indigo-600 text-white px-8 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
               >
                 Create
               </button>
@@ -441,18 +494,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
                     </div>
                     <button 
                       onClick={() => deleteCategory(cat)}
-                      className="p-3 bg-white rounded-xl text-slate-300 hover:text-red-500 hover:border-red-100 border border-slate-100 transition-all opacity-0 group-hover:opacity-100"
+                      className="p-3 bg-white rounded-xl text-slate-300 hover:text-red-500 hover:border-red-100 border border-slate-100 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+                      title="Delete Category"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
                   </div>
                 );
               })}
               {categories.length === 0 && (
-                <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+                <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No active taxonomy defined.</p>
+                   <p className="text-slate-300 text-[10px] mt-2">Start by creating your first produce section above.</p>
                 </div>
               )}
             </div>
@@ -465,9 +520,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ products, setProducts, 
                </svg>
             </div>
             <div>
-              <p className="text-sm font-black text-emerald-900 mb-1">Taxonomy Logic</p>
+              <p className="text-sm font-black text-emerald-900 mb-1">Taxonomy Governance</p>
               <p className="text-xs text-emerald-700 leading-relaxed">
-                Deleting a category is only permitted when zero items are assigned to it. This prevents "orphaned" produce in your market navigation.
+                Categories are the backbone of your market's navigation. Ensure they are descriptive. Note that categories with active inventory cannot be deleted to maintain data integrity.
               </p>
             </div>
           </div>
