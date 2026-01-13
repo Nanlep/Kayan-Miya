@@ -1,0 +1,8 @@
+{
+  "name": "Kayan Miya - Fresh Farm-to-Table Foodstuff",
+  "description": "Nigeria's local premium e-commerce platform for fresh vegetables, beef, chicken, and raw foodstuff. High-quality produce delivered in 24 hours.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
