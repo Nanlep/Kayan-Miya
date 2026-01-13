@@ -213,6 +213,8 @@ const App: React.FC = () => {
               setProducts={setProducts} 
               categories={categories}
               setCategories={setCategories}
+              orders={orders}
+              setOrders={setOrders}
               onLogout={handleLogout}
             />
           ) : (

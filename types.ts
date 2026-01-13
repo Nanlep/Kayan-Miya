@@ -15,14 +15,22 @@ export interface CartItem extends Product {
   quantity: number;
 }
 
+export type OrderStatus = 'pending' | 'dispatched' | 'shipped' | 'arrived' | 'delivered';
+
 export interface Order {
   id: string;
   items: CartItem[];
   total: number;
-  status: 'pending' | 'shipped' | 'delivered';
+  status: OrderStatus;
   date: string;
   customerName: string;
   paymentMethod: 'card' | 'bani';
+  logistics?: {
+    dispatchedAt?: string;
+    arrivedAt?: string;
+    estimatedDelivery?: string;
+    lastLocation?: string;
+  };
 }
 
 export interface AnalyticsData {
